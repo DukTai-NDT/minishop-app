@@ -1,0 +1,46 @@
+---
+- name: Locate kubectl in Ubuntu or Docker Desktop on Windows
+  ansible.builtin.shell: |
+    if command -v kubectl >/dev/null 2>&1; then
+      command -v kubectl
+    elif command -v kubectl.exe >/dev/null 2>&1; then
+      command -v kubectl.exe
+    elif [ -x "{{ minishop_kubectl_windows_path }}" ]; then
+      printf '%s\n' "{{ minishop_kubectl_windows_path }}"
+    fi
+  register: minishop_kubectl_lookup
+  changed_when: false
+  failed_when: false
+
+- name: Require kubectl
+  ansible.builtin.assert:
+    that:
+      - minishop_kubectl_lookup.stdout | trim | length > 0
+    fail_msg: >-
+      kubectl was not found in Ubuntu PATH or at the configured Docker Desktop path.
+      Install kubectl in WSL or update minishop_kubectl_windows_path in group_vars.
+
+- name: Store kubectl executable path
+  ansible.builtin.set_fact:
+    kubectl_bin: "{{ minishop_kubectl_lookup.stdout | trim }}"
+
+- name: Convert manifest directory for Windows kubectl
+  ansible.builtin.command:
+    argv:
+      - wslpath
+      - -w
+      - "{{ minishop_manifest_dir }}"
+  register: minishop_manifest_dir_windows
+  changed_when: false
+  when: kubectl_bin.lower().endswith('.exe')
+
+- name: Set manifest directory for selected kubectl
+  ansible.builtin.set_fact:
+    kubectl_manifest_dir: "{{ (minishop_manifest_dir_windows.stdout | trim) if kubectl_bin.lower().endswith('.exe') else minishop_manifest_dir }}"
+
+- name: Check Kubernetes cluster connectivity
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - cluster-info
+  changed_when: false

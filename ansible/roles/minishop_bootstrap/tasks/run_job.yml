@@ -1,0 +1,74 @@
+---
+- name: Check whether Job {{ minishop_job_name }} exists
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - get
+      - job
+      - "{{ minishop_job_name }}"
+      - -n
+      - "{{ minishop_namespace }}"
+      - -o
+      - json
+  register: minishop_job_lookup
+  changed_when: false
+  failed_when: false
+
+- name: Fail if Job {{ minishop_job_name }} lookup returned an unexpected error
+  ansible.builtin.assert:
+    that:
+      - minishop_job_lookup.rc == 0 or 'NotFound' in minishop_job_lookup.stderr
+    fail_msg: "Could not inspect Job {{ minishop_job_name }}: {{ minishop_job_lookup.stderr }}"
+
+- name: Create Job {{ minishop_job_name }} only when absent
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - apply
+      - -n
+      - "{{ minishop_namespace }}"
+      - -f
+      - "{{ kubectl_manifest_dir }}/{{ minishop_job_manifest }}"
+  register: minishop_job_apply
+  changed_when: "' created' in minishop_job_apply.stdout or ' configured' in minishop_job_apply.stdout"
+  when: minishop_job_lookup.rc != 0
+
+- name: Wait for Job {{ minishop_job_name }} to complete or fail
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - get
+      - job
+      - "{{ minishop_job_name }}"
+      - -n
+      - "{{ minishop_namespace }}"
+      - -o
+      - json
+  register: minishop_job_status
+  changed_when: false
+  until: >-
+    (
+      ((minishop_job_status.stdout | from_json).status.conditions | default([])
+      | selectattr('type', 'equalto', 'Complete')
+      | selectattr('status', 'equalto', 'True')
+      | list | length) > 0
+    ) or
+    (
+      ((minishop_job_status.stdout | from_json).status.conditions | default([])
+      | selectattr('type', 'equalto', 'Failed')
+      | selectattr('status', 'equalto', 'True')
+      | list | length) > 0
+    )
+  retries: "{{ minishop_job_timeout_retries }}"
+  delay: "{{ minishop_job_poll_delay }}"
+
+- name: Fail if Job {{ minishop_job_name }} failed
+  ansible.builtin.fail:
+    msg: "Job {{ minishop_job_name }} failed. Inspect it with: kubectl logs job/{{ minishop_job_name }} -n {{ minishop_namespace }}"
+  when: >-
+    (
+      ((minishop_job_status.stdout | from_json).status.conditions | default([])
+      | selectattr('type', 'equalto', 'Failed')
+      | selectattr('status', 'equalto', 'True')
+      | list | length) > 0
+    )

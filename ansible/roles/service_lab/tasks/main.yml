@@ -1,0 +1,21 @@
+---
+- name: Install nginx for the handler lab
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: false
+
+- name: Ensure nginx is enabled and running
+  ansible.builtin.service:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Install the MiniShop handler lab site config
+  ansible.builtin.template:
+    src: minishop-lab.conf.j2
+    dest: /etc/nginx/conf.d/minishop-lab.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nginx after configuration change

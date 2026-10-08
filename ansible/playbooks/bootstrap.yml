@@ -1,0 +1,7 @@
+---
+- name: Bootstrap MiniShop on Kubernetes
+  hosts: dev
+  gather_facts: false
+  roles:
+    - role: "{{ playbook_dir }}/../roles/prerequisites"
+    - role: "{{ playbook_dir }}/../roles/minishop_bootstrap"

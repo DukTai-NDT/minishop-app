@@ -1,0 +1,171 @@
+---
+- name: Verify local Kubernetes Secret manifests are present
+  ansible.builtin.stat:
+    path: "{{ minishop_manifest_dir }}/{{ item }}"
+  loop:
+    - postgres-secret.yaml
+    - app-secret.yaml
+  register: minishop_secret_manifest_checks
+
+- name: Require local Secret manifests
+  ansible.builtin.assert:
+    that:
+      - minishop_secret_manifest_checks.results[0].stat.exists
+      - minishop_secret_manifest_checks.results[1].stat.exists
+    fail_msg: >-
+      postgres-secret.yaml and app-secret.yaml are intentionally excluded from Git.
+      Create both local files from k8s/examples with credentials matching the target database.
+
+- name: Render non-committed development environment file
+  block:
+    - name: Ensure persistent local config directory exists
+      ansible.builtin.file:
+        path: "{{ minishop_dev_config_dir }}"
+        state: directory
+        mode: "0700"
+      check_mode: false
+
+    - name: Render development environment file
+      ansible.builtin.template:
+        src: dev.env.j2
+        dest: "{{ minishop_dev_env_file }}"
+        mode: "0600"
+      no_log: true
+  tags:
+    - dev_env
+
+- name: Check whether the MiniShop namespace exists
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - get
+      - namespace
+      - "{{ minishop_namespace }}"
+      - -o
+      - name
+  register: minishop_namespace_lookup
+  changed_when: false
+  failed_when: false
+
+- name: Fail if namespace lookup returned an unexpected error
+  ansible.builtin.assert:
+    that:
+      - minishop_namespace_lookup.rc == 0 or 'NotFound' in minishop_namespace_lookup.stderr
+    fail_msg: "Could not inspect namespace {{ minishop_namespace }}: {{ minishop_namespace_lookup.stderr }}"
+
+- name: Create the MiniShop namespace only when absent
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - create
+      - namespace
+      - "{{ minishop_namespace }}"
+  register: minishop_namespace_create
+  changed_when: "' created' in minishop_namespace_create.stdout"
+  when: minishop_namespace_lookup.rc != 0
+
+- name: Apply PostgreSQL resources
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - apply
+      - -n
+      - "{{ minishop_namespace }}"
+      - -f
+      - "{{ kubectl_manifest_dir }}/postgres-secret.yaml"
+      - -f
+      - "{{ kubectl_manifest_dir }}/postgres-pvc.yaml"
+      - -f
+      - "{{ kubectl_manifest_dir }}/postgres-service.yaml"
+      - -f
+      - "{{ kubectl_manifest_dir }}/postgres-statefulset.yaml"
+  register: minishop_postgres_apply
+  changed_when: "' created' in minishop_postgres_apply.stdout or ' configured' in minishop_postgres_apply.stdout"
+
+- name: Wait for PostgreSQL StatefulSet
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - rollout
+      - status
+      - statefulset/postgres
+      - -n
+      - "{{ minishop_namespace }}"
+      - "--timeout={{ minishop_rollout_timeout }}"
+  changed_when: false
+
+- name: Apply application Secret
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - apply
+      - -n
+      - "{{ minishop_namespace }}"
+      - -f
+      - "{{ kubectl_manifest_dir }}/app-secret.yaml"
+  register: minishop_app_secret_apply
+  changed_when: "' created' in minishop_app_secret_apply.stdout or ' configured' in minishop_app_secret_apply.stdout"
+
+- name: Run migration Job idempotently
+  ansible.builtin.include_tasks: run_job.yml
+  vars:
+    minishop_job_name: migrate
+    minishop_job_manifest: migrate-job.yaml
+
+- name: Run seed Job idempotently
+  ansible.builtin.include_tasks: run_job.yml
+  vars:
+    minishop_job_name: seed
+    minishop_job_manifest: seed-job.yaml
+
+- name: Apply backend Service and Deployment
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - apply
+      - -n
+      - "{{ minishop_namespace }}"
+      - -f
+      - "{{ kubectl_manifest_dir }}/backend-service.yaml"
+      - -f
+      - "{{ kubectl_manifest_dir }}/backend-deployment.yaml"
+  register: minishop_backend_apply
+  changed_when: "' created' in minishop_backend_apply.stdout or ' configured' in minishop_backend_apply.stdout"
+
+- name: Wait for backend Deployment
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - rollout
+      - status
+      - deployment/backend
+      - -n
+      - "{{ minishop_namespace }}"
+      - "--timeout={{ minishop_rollout_timeout }}"
+  changed_when: false
+
+- name: Apply frontend Service and Deployment
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - apply
+      - -n
+      - "{{ minishop_namespace }}"
+      - -f
+      - "{{ kubectl_manifest_dir }}/frontend-service.yaml"
+      - -f
+      - "{{ kubectl_manifest_dir }}/frontend-deployment.yaml"
+  register: minishop_frontend_apply
+  changed_when: "' created' in minishop_frontend_apply.stdout or ' configured' in minishop_frontend_apply.stdout"
+
+- name: Wait for frontend Deployment
+  ansible.builtin.command:
+    argv:
+      - "{{ kubectl_bin }}"
+      - rollout
+      - status
+      - deployment/frontend
+      - -n
+      - "{{ minishop_namespace }}"
+      - "--timeout={{ minishop_rollout_timeout }}"
+  changed_when: false
