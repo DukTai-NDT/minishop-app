@@ -1,0 +1,19 @@
+---
+minishop_namespace: minishop
+ansible_python_interpreter: auto_silent
+minishop_manifest_dir: "{{ playbook_dir }}/../../k8s/base"
+minishop_kubectl_windows_path: "/mnt/c/Program Files/Docker/Docker/resources/bin/kubectl.exe"
+
+minishop_rollout_timeout: 300s
+minishop_job_timeout_retries: 60
+minishop_job_poll_delay: 5
+
+minishop_dev_config_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/.config/minishop"
+minishop_dev_env_file: "{{ minishop_dev_config_dir }}/dev.env"
+minishop_dev_database_url: "{{ lookup('ansible.builtin.env', 'MINISHOP_DEV_DATABASE_URL') | default('postgresql://minishop:CHANGE_ME@localhost:5432/minishop?schema=public', true) }}"
+minishop_backend_port: 4000
+minishop_frontend_port: 3000
+minishop_frontend_origin: "http://localhost:3000"
+minishop_frontend_api_url: "http://localhost:4000/api"
+
+lab_nginx_port: 8088

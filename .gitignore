@@ -10,4 +10,6 @@ coverage/
 *.log
 *.tsbuildinfo
 backend/src/generated/prisma
+/k8s/base/postgres-secret.yaml
+/k8s/base/app-secret.yaml
 frontend/next-env.d.ts

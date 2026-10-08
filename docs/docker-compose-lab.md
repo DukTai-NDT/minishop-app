@@ -5,6 +5,14 @@
 
 > Đây là hướng dẫn thực hành, không phải cấu hình hoàn chỉnh để sao chép. Tự tạo Dockerfile và Compose trong lúc làm; dùng phần tiêu chí cuối bài để tự kiểm tra.
 
+## Những điều cần nắm trước Phase 1
+
+1. **Container-to-container:** các service trong cùng Compose network gọi nhau bằng service name, ví dụ backend kết nối DB qua `db:5432`; không dùng `localhost` để gọi container khác.
+2. **Host-to-container:** trình duyệt và công cụ trên máy host truy cập container qua `localhost` cùng published port, ví dụ `http://localhost:4000` khi Compose publish cổng API.
+3. **Persistent storage:** PostgreSQL cần named volume gắn vào thư mục dữ liệu để dữ liệu còn sau khi container bị tạo lại. Xóa volume sẽ xóa dữ liệu trong đó.
+4. **Next.js environment:** phân biệt biến được nhúng lúc build và biến được đọc khi container chạy. `NEXT_PUBLIC_API_URL` được dùng trong bundle phía trình duyệt nên cần đúng với URL mà trình duyệt truy cập được; service name nội bộ như `backend` không phải hostname cho trình duyệt trên host.
+5. **Database readiness:** `depends_on` thông thường chỉ sắp thứ tự khởi động. Muốn backend chờ PostgreSQL sẵn sàng, khai báo healthcheck cho DB và `depends_on` với `condition: service_healthy`.
+
 ## Kết quả cần đạt
 
 Khi hoàn tất, bạn có thể:

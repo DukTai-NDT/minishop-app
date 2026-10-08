@@ -1,0 +1,7 @@
+---
+- name: Practice handlers with a local Linux service
+  hosts: dev
+  gather_facts: false
+  become: true
+  roles:
+    - role: "{{ playbook_dir }}/../roles/service_lab"
