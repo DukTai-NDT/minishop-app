@@ -1,8 +1,13 @@
-name: CI
+name: CI/CD
 
 on:
-  push:
   pull_request:
+    branches:
+      - main
+
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -70,7 +75,7 @@ jobs:
   publish:
     name: Publish Docker images to GHCR
     needs: [validate, docker-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/docker-setup'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     permissions:
@@ -116,86 +121,3 @@ jobs:
             org.opencontainers.image.source=https://github.com/DukTai-NDT/minishop-app
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
-
-  update-manifests:
-    name: Update GitOps image tags
-    needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/docker-setup'
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout deployment branch
-        uses: actions/checkout@v4
-        with:
-          ref: feature/docker-setup
-          fetch-depth: 0
-          persist-credentials: true
-
-      - name: Check branch has not advanced
-        env:
-          BUILD_SHA: ${{ github.sha }}
-        run: |
-          CURRENT_SHA="$(git rev-parse HEAD)"
-          if [ "$CURRENT_SHA" != "$BUILD_SHA" ]; then
-            echo "::error::Branch advanced since image build. Refusing to deploy an older image."
-            exit 1
-          fi
-
-      - name: Update Kustomize image tags
-        env:
-          BUILD_SHA: ${{ github.sha }}
-        run: |
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          path = Path("k8s/base/kustomization.yaml")
-          content = path.read_text()
-          tag = "sha-" + os.environ["BUILD_SHA"]
-
-          for image in ("mini-ecommerce-backend", "mini-ecommerce-frontend"):
-              lines = content.splitlines(keepends=True)
-              found = False
-
-              for i, line in enumerate(lines):
-                  if line.strip() == f"- name: {image}":
-                      if found:
-                          raise SystemExit(f"Duplicate image: {image}")
-                      found = True
-                      tag_found = False
-                      for j in range(i + 1, len(lines)):
-                          if lines[j].strip().startswith("- name:"):
-                              break
-                          if lines[j].strip().startswith("newTag:"):
-                              indent = lines[j][:len(lines[j]) - len(lines[j].lstrip())]
-                              lines[j] = f"{indent}newTag: {tag}\n"
-                              tag_found = True
-                              break
-                      if not tag_found:
-                          raise SystemExit(f"Missing newTag for {image}")
-
-              if not found:
-                  raise SystemExit(f"Image not found: {image}")
-              content = "".join(lines)
-
-          path.write_text(content)
-          print(f"Updated backend and frontend to {tag}")
-          PY
-
-      - name: Commit and push GitOps update
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add k8s/base/kustomization.yaml
-
-          if git diff --cached --quiet; then
-            echo "Image tags already up to date."
-            exit 0
-          fi
-
-          git commit -m "gitops: update images to sha-${GITHUB_SHA}"
-          git push origin HEAD:feature/docker-setup

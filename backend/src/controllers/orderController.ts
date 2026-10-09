@@ -9,6 +9,7 @@ export async function placeOrder(req: Request, res: Response) {
   if (!input.success)
     throw new AppError(400, "VALIDATION_ERROR", input.error.issues[0]?.message ?? "Invalid order.");
   const result = await createOrder(input.data);
+  console.log("hello")
   res.status(201).json({
     success: true,
     data: { ...result.order, lookupToken: result.lookupToken },
