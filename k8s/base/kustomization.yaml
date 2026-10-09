@@ -6,3 +6,12 @@ resources:
   - backend-service.yaml
   - frontend-deployment.yaml
   - frontend-service.yaml
+
+images:
+  - name: mini-ecommerce-backend
+    newName: ghcr.io/duktai-ndt/minishop-backend
+    newTag: sha-fba62fbc1c7261d18662551a46cf757ea28ac228
+
+  - name: mini-ecommerce-frontend
+    newName: ghcr.io/duktai-ndt/minishop-frontend
+    newTag: sha-fba62fbc1c7261d18662551a46cf757ea28ac228
