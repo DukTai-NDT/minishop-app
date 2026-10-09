@@ -1,6 +1,6 @@
 import type { ApiResult, Category, Product } from "@/types";
 
-const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+const base = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 export async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   const response = await fetch(`${base}${path}`, {
     ...init,
