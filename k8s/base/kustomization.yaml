@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - backend-deployment.yaml
+  - backend-service.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
+
+images:
+  - name: mini-ecommerce-backend
+    newName: ghcr.io/duktai-ndt/minishop-backend
+    newTag: sha-37472fb15f413c713d0c6ab6f5c7c6c3bcbd422e
+
+  - name: mini-ecommerce-frontend
+    newName: ghcr.io/duktai-ndt/minishop-frontend
+    newTag: sha-37472fb15f413c713d0c6ab6f5c7c6c3bcbd422e
